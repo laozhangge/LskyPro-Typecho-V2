@@ -9,7 +9,7 @@ use Widget\Upload;
 
 /**
  * 可以直接在编辑时粘贴图片自动上传图片至兰空图床(LskyPro)，并返回markdown的图片地址。
- * 该版本是在 isYangs 和 yeying 版本基础之上进行了优化，新增图片权限设置、存储策略选择、相册选择，同时修复其他BUG。
+ * 该版本是在 isYangs 和 yeying 版本基础之上进行了再次开发，新增图片权限选择、存储策略选择、相册选择等功能，同时修复了其他BUG。
  *
  * @package LskyProUpload pro+
  * @author  老张博客
