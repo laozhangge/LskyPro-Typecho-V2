@@ -18,10 +18,8 @@ use Widget\Upload;
  *
  * Changelog v2.0.1 (安全修复):
  *  - [安全] 修复 CSRF Referer 检查可绕过漏洞（空 Referer 不再通过）
- *  - [安全] 修复 JS 注入风险（使用 json_encode 替代字符串拼接）
  *  - [安全] 修复 unserialize 反序列化漏洞（禁用 allowed_classes）
  *  - [安全] 增加 uploadHandle/deleteHandle/modifyHandle 登录检查
- *  - [安全] Token 输入框改为 password 类型，增加显示/隐藏切换
  *  - [安全] 增强 _sanitizeName 文件名过滤（白名单策略）
  *
  * Changelog v1.2.0:
@@ -487,20 +485,10 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       </div>
       <div class="lsky-field">
         <label>Token <span class="lsky-required">*</span></label>
-        <div class="lsky-input-wrap" style="display:flex;gap:8px;align-items:center;">
-          <div style="flex:1;position:relative;">
-            <span class="lsky-input-prefix">🔑</span>
-            <input class="lsky-input" id="lskyTokenInput" type="password"
-                   placeholder="请输入 API Token" value="{$vToken}" autocomplete="new-password"
-                   style="padding-right:70px;">
-            <button type="button" id="lskyToggleToken"
-                    style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
-                           background:none;border:1px solid #e2e8f0;border-radius:4px;
-                           padding:2px 8px;font-size:11px;color:#64748b;cursor:pointer;
-                           font-family:inherit;">
-              显示
-            </button>
-          </div>
+        <div class="lsky-input-wrap">
+          <span class="lsky-input-prefix">🔑</span>
+          <input class="lsky-input" id="lskyTokenInput" type="text"
+                 placeholder="请输入 API Token" value="{$vToken}" autocomplete="new-password">
         </div>
         <p class="lsky-field-hint">在兰空图床「个人中心 → API」中生成，格式为 <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:11px;">Bearer xxxxxxxx</code></p>
       </div>
@@ -852,21 +840,6 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
     var testBtn = document.getElementById('lskyTestBtn');
     if (testBtn) testBtn.addEventListener('click', testConnection);
 
-    /* ── Token 显示/隐藏切换 ── */
-    var toggleBtn = document.getElementById('lskyToggleToken');
-    var tokenInput = document.getElementById('lskyTokenInput');
-    if (toggleBtn && tokenInput) {
-        toggleBtn.addEventListener('click', function () {
-            if (tokenInput.type === 'password') {
-                tokenInput.type = 'text';
-                this.textContent = '隐藏';
-            } else {
-                tokenInput.type = 'password';
-                this.textContent = '显示';
-            }
-        });
-    }
-
     /* ── 绑定策略/相册随 API/Token 变化自动刷新 ── */
     function bindReload(el, fn) {
         if (!el) return;
@@ -899,7 +872,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
     });
 
     /* ── 初始化格式卡片（使用预计算的 checked 值） ── */
-    var saved = <?php echo json_encode($vFmt); ?>;
+    var saved = '{$vFmt}';
     var idMap  = { markdown: 'lfmt_md', url: 'lfmt_url', html: 'lfmt_html', bbcode: 'lfmt_bb' };
     var initEl = document.getElementById(idMap[saved] || 'lfmt_md');
     if (initEl) initEl.checked = true;
