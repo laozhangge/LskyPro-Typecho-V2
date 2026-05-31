@@ -102,6 +102,13 @@
 
 ## 📝 更新日志
 
+### v2.0.1
+
+- 🔒 修复 CSRF Referer 检查可绕过漏洞（空 Referer 不再通过）
+- 🔒 修复 unserialize 反序列化漏洞（禁用 allowed_classes，防止 PHP 对象注入）
+- 🔒 增加 uploadHandle / deleteHandle / modifyHandle 登录检查
+- 🔒 增强文件名过滤（白名单策略，只保留安全字符）
+
 ### v2.0.0
 
 - 🔧 修复 Typecho 1.2.0 版本以上报错问题
