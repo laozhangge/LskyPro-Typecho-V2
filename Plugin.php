@@ -13,8 +13,16 @@ use Widget\Upload;
  *
  * @package LskyProUpload pro+
  * @author  老张博客
- * @version 2.0.0
+ * @version 2.0.1
  * @link    https://laozhang.org
+ *
+ * Changelog v2.0.1 (安全修复):
+ *  - [安全] 修复 CSRF Referer 检查可绕过漏洞（空 Referer 不再通过）
+ *  - [安全] 修复 JS 注入风险（使用 json_encode 替代字符串拼接）
+ *  - [安全] 修复 unserialize 反序列化漏洞（禁用 allowed_classes）
+ *  - [安全] 增加 uploadHandle/deleteHandle/modifyHandle 登录检查
+ *  - [安全] Token 输入框改为 password 类型，增加显示/隐藏切换
+ *  - [安全] 增强 _sanitizeName 文件名过滤（白名单策略）
  *
  * Changelog v1.2.0:
  *  - [安全] 增加登录鉴权，防止未授权上传
@@ -38,7 +46,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
 {
     const UPLOAD_DIR   = '/usr/uploads';
     const PLUGIN_NAME  = 'LskyProUpload';
-    const VERSION      = '2.0.0';
+    const VERSION      = '2.0.1';
     const MAX_IMG_SIZE = 10 * 1024 * 1024; // 10 MB，可按需调整
 
     // 只保留小写扩展名（_getExtension 已做 strtolower）
@@ -455,7 +463,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       <p class="lsky-banner-title">LskyPro Upload</p>
       <p class="lsky-banner-desc">粘贴图片自动上传至兰空图床，支持 Markdown、HTML、BBCode、URL 四种插入格式</p>
     </div>
-    <span class="lsky-banner-ver">v2.0.0</span>
+    <span class="lsky-banner-ver">v2.0.1</span>
   </div>
 
   <!-- ── Section 1: API 配置 ── -->
@@ -479,10 +487,20 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
       </div>
       <div class="lsky-field">
         <label>Token <span class="lsky-required">*</span></label>
-        <div class="lsky-input-wrap">
-          <span class="lsky-input-prefix">🔑</span>
-          <input class="lsky-input" id="lskyTokenInput" type="text"
-                 placeholder="请输入 API Token" value="{$vToken}" autocomplete="new-password">
+        <div class="lsky-input-wrap" style="display:flex;gap:8px;align-items:center;">
+          <div style="flex:1;position:relative;">
+            <span class="lsky-input-prefix">🔑</span>
+            <input class="lsky-input" id="lskyTokenInput" type="password"
+                   placeholder="请输入 API Token" value="{$vToken}" autocomplete="new-password"
+                   style="padding-right:70px;">
+            <button type="button" id="lskyToggleToken"
+                    style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                           background:none;border:1px solid #e2e8f0;border-radius:4px;
+                           padding:2px 8px;font-size:11px;color:#64748b;cursor:pointer;
+                           font-family:inherit;">
+              显示
+            </button>
+          </div>
         </div>
         <p class="lsky-field-hint">在兰空图床「个人中心 → API」中生成，格式为 <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:11px;">Bearer xxxxxxxx</code></p>
       </div>
@@ -834,6 +852,21 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
     var testBtn = document.getElementById('lskyTestBtn');
     if (testBtn) testBtn.addEventListener('click', testConnection);
 
+    /* ── Token 显示/隐藏切换 ── */
+    var toggleBtn = document.getElementById('lskyToggleToken');
+    var tokenInput = document.getElementById('lskyTokenInput');
+    if (toggleBtn && tokenInput) {
+        toggleBtn.addEventListener('click', function () {
+            if (tokenInput.type === 'password') {
+                tokenInput.type = 'text';
+                this.textContent = '隐藏';
+            } else {
+                tokenInput.type = 'password';
+                this.textContent = '显示';
+            }
+        });
+    }
+
     /* ── 绑定策略/相册随 API/Token 变化自动刷新 ── */
     function bindReload(el, fn) {
         if (!el) return;
@@ -866,7 +899,7 @@ class LskyProUpload_Plugin implements Typecho_Plugin_Interface
     });
 
     /* ── 初始化格式卡片（使用预计算的 checked 值） ── */
-    var saved  = '{$vFmt}';
+    var saved = <?php echo json_encode($vFmt); ?>;
     var idMap  = { markdown: 'lfmt_md', url: 'lfmt_url', html: 'lfmt_html', bbcode: 'lfmt_bb' };
     var initEl = document.getElementById(idMap[saved] || 'lfmt_md');
     if (initEl) initEl.checked = true;
@@ -934,10 +967,10 @@ HTML;
         if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'XMLHttpRequest') {
             self::jsonResponse(false, '非法请求');
         }
-        //    b) Referer 来源校验
+        //    b) Referer 来源校验（空 Referer 也拒绝，防止 data: URL 等绕过）
         $referer = $_SERVER['HTTP_REFERER'] ?? '';
-        $siteUrl = Options::alloc()->siteUrl;
-        if (!empty($referer) && strpos($referer, rtrim($siteUrl, '/')) !== 0) {
+        $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
+        if (empty($referer) || strpos($referer, $siteUrl) !== 0) {
             self::jsonResponse(false, '非法请求来源');
         }
 
@@ -1003,6 +1036,12 @@ HTML;
             return false;
         }
 
+        // 安全检查：确保用户已登录
+        $user = \Widget\User::alloc();
+        if (!$user->hasLogin()) {
+            return false;
+        }
+
         $name = $file['name'];
         $ext  = self::_getExtension($name);
         $file['name'] = self::_sanitizeName($name) . '.' . $ext;
@@ -1020,6 +1059,12 @@ HTML;
 
     public static function deleteHandle(array $content): bool
     {
+        // 安全检查：确保用户已登录
+        $user = \Widget\User::alloc();
+        if (!$user->hasLogin()) {
+            return false;
+        }
+
         $ext = $content['attachment']->type;
 
         if (self::_isImage($ext)) {
@@ -1034,6 +1079,12 @@ HTML;
     public static function modifyHandle($content, $file)
     {
         if (empty($file['name'])) {
+            return false;
+        }
+
+        // 安全检查：确保用户已登录
+        $user = \Widget\User::alloc();
+        if (!$user->hasLogin()) {
             return false;
         }
 
@@ -1063,8 +1114,9 @@ HTML;
     public static function attachmentHandle(array $content): string
     {
         // 修复：使用 pathinfo 获取扩展名，避免 substr 截断 webp/tiff/jpeg 等
+        // 修复：使用 allowed_classes=false 防止 PHP 对象注入攻击
         // 修复：unserialize 失败时返回 false，需做类型校验避免 PHP Warning
-        $arr = unserialize($content['text']);
+        $arr = @unserialize($content['text'], ['allowed_classes' => false]);
         if (!is_array($arr) || empty($arr['path'])) {
             return $content['attachment']->path ?? '';
         }
@@ -1136,7 +1188,8 @@ HTML;
      */
     private static function _sanitizeName(string $name): string
     {
-        $name = str_replace(['"', '<', '>', '\\', '/', "\0"], '', $name);
+        // 只保留安全字符：字母、数字、下划线、连字符、中文
+        $name = preg_replace('/[^a-zA-Z0-9_\-\x{4e00}-\x{9fa5}]/u', '', $name);
         $name = pathinfo($name, PATHINFO_FILENAME);
         return $name ?: 'image';
     }
